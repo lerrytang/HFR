@@ -1,9 +1,8 @@
 from trainer.env.hfr_env_v01 import HumanFollowingGymEnv
 import numpy as np
 import pybullet as p
-from robot.robot_manager import RobotType
 
-env = HumanFollowingGymEnv(robot_type=RobotType.R2D2,
+env = HumanFollowingGymEnv(robot_type='R2D2',
                            target_angle_max=np.pi / 6,
                            render=True)
 print(env.action_space.high)

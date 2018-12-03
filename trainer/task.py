@@ -39,7 +39,7 @@ def train(config):
     model_path = os.path.join(
         config.job_dir, 'model/{}.ckpt'.format(config.agent))
 
-    env = HumanFollowingGymEnv(robot_type=robot.robot_manager.RobotType.R2D2)
+    env = HumanFollowingGymEnv(robot_type='R2D2')
     config.action_dim = env.action_dim
     config.action_high = env.action_space.high
     config.action_low = env.action_space.low

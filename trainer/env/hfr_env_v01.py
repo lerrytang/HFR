@@ -9,7 +9,7 @@ from gym import spaces
 import numpy as np
 import pybullet as p
 import pybullet_data
-from robot.robot_manager import RobotType, RobotManager
+from trainer.robot.robot_manager import RobotManager
 
 IMAGE_W = 320
 IMAGE_H = 240
@@ -52,7 +52,7 @@ class HumanFollowingGymEnv(gym.Env):
     }
 
     def __init__(self,
-                 robot_type=RobotType.HSR,
+                 robot_type='R2D2',
                  target_distance_min=2.0,
                  target_distance_max=5.0,
                  target_angle_max=np.pi / 6,
