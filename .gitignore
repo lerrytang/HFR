@@ -1,0 +1,7 @@
+.DS_Store
+.idea
+*.egg-info
+results/
+venv/
+*.pyc
+trainer/robot/urdf/hsr/
