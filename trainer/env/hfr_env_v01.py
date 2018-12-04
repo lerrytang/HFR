@@ -33,15 +33,15 @@ class HumanFollowingGymEnv(gym.Env):
     2. velocity for right driving wheel(s)
 
     The state space includes:
-    1. the depth image from the head camera (size = IMAGE_H * IMAGE_W)
-    2. position (size=3) and orientation (size=3) change between time t and t-1
+        k depth images from the head camera (size = IMAGE_H * IMAGE_W)
+        where k is the frame skip number
 
     The reward function is based on the distance between the robot and the target.
 
     Each episode ends when:
     1. max_steps has passed
     2. either robot has fallen
-    3. distance between robots is less than 1 meter
+    3. distance between robots is less than min_distance
     whichever occurs first.
 
     """
@@ -53,15 +53,15 @@ class HumanFollowingGymEnv(gym.Env):
 
     def __init__(self,
                  robot_type='R2D2',
-                 target_distance_min=2.0,
+                 target_distance_min=3.0,
                  target_distance_max=5.0,
-                 target_angle_max=np.pi / 6,
+                 target_angle_max=np.pi / 4,
                  min_distance=1.0,
-                 max_steps=500,
-                 time_step=0.01,
-                 action_repeat=5,
+                 max_steps=400,
+                 time_step=0.05,
+                 action_repeat=4,
                  reward_scale=1.0,
-                 reward_action_coef=0.0,
+                 reward_action_coef=.5,
                  reward_orient_coef=2.0,
                  render=False):
         """Initialize the human following environment."""
@@ -79,7 +79,6 @@ class HumanFollowingGymEnv(gym.Env):
         self._reward_scale = reward_scale
         self._env_step_counter = 0
         self._render = render
-        self._last_xy_yaw = None
         self._chaser = None
         self._target = None
         self._target_distance_range = [target_distance_min,
@@ -92,6 +91,7 @@ class HumanFollowingGymEnv(gym.Env):
         self.action_space = spaces.Box(low=-action_bound,
                                        high=action_bound,
                                        dtype=np.float64)
+        self.last_action = [0.] * self.action_dim
 
     def _reset_env(self):
         p.resetSimulation(self._pybullet_client)
@@ -167,12 +167,13 @@ class HumanFollowingGymEnv(gym.Env):
             self.set_chaser_xy_yaw(chaser_x, chaser_y, chaser_yaw)
             self.set_target_xy_yaw(target_x, target_y, target_yaw)
         self._env_step_counter = 0
-        self._last_xy_yaw = None
+        self.last_action = [0.] * self.action_dim
         if self._render:
             p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
             p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, 1)
             p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 1)
-        return self._get_observation()
+        ob, _, _, _ = self.step([0] * self.action_dim)
+        return ob
 
     def set_target_xy_yaw(self, x, y, yaw):
         self._target.set_xy_yaw(x, y, yaw)
@@ -182,15 +183,7 @@ class HumanFollowingGymEnv(gym.Env):
 
     def _get_observation(self):
         rgb_array, depth_array = self._chaser.get_camera_image(IMAGE_W, IMAGE_H)
-        (x, y), yaw = self._chaser.get_xy_yaw()
-        if self._last_xy_yaw:
-            xy_yaw_diff = [x - self._last_xy_yaw[0],
-                           y - self._last_xy_yaw[1],
-                           yaw - self._last_xy_yaw[2]]
-        else:
-            xy_yaw_diff = [.0, .0, .0]
-        self._last_xy_yaw = [x, y, yaw]
-        return depth_array, xy_yaw_diff
+        return depth_array
 
     def _get_distance(self):
         (chaser_x, chaser_y), _ = self._chaser.get_xy_yaw()
@@ -213,14 +206,22 @@ class HumanFollowingGymEnv(gym.Env):
     def _get_reward(self, action):
         distance_r = -self._get_distance()
         orientation_r = -self._get_orientation_diff()
-        action_r = -np.linalg.norm(action)
+        action_diff = [y - x for x, y in zip(self.last_action, action)]
+        self.last_action = action
+        action_r = -np.linalg.norm(action_diff)
         fall_r = -10000 if self._chaser.is_fallen() else 0
+#        self._chaser.show_text_over_head(
+#            'distance_r={0:.2f}, '
+#            'orientation_r={1:.2f}, '
+#            'action_r={2:.2f}, '
+#            'fall_r={3:.2f}'.format(
+#                distance_r, orientation_r, action_r, fall_r))
         return ((fall_r + distance_r +
                  self._reward_orient_coef * orientation_r +
                  self._reward_action_coef * action_r) * self._reward_scale)
 
     def _is_episode_over(self):
-        return ((self._env_step_counter >= self._max_steps) or
+        return ((self._env_step_counter > self._max_steps) or
                 (self._chaser.is_fallen()) or
                 (self._target.is_fallen()) or
                 (self._get_distance() < self._min_distance))
@@ -238,12 +239,16 @@ class HumanFollowingGymEnv(gym.Env):
                                                   self.action_space.low,
                                                   self.action_space.high))
             target_ctrl = [0.] * self.action_dim
+
+        frames = []
         for i in range(self._action_repeat):
             self._chaser.apply_control(chaser_ctrl)
             self._target.apply_control(target_ctrl)
             p.stepSimulation()
+            depth_img = self._get_observation()
+            frames.append(np.expand_dims(depth_img, axis=-1))
         self._env_step_counter += 1
-        observation = self._get_observation()
+        observation = np.concatenate(frames, axis=-1)
         reward = self._get_reward(chaser_ctrl)
         done = self._is_episode_over()
 #        self._chaser.show_text_over_head('reward={0:.4f}'.format(reward))

@@ -57,7 +57,7 @@ while (( "$#" )); do
       exit 1
       ;;
     *) # preserve positional arguments
-      PARAMS="$PARAMS $1"
+      PARAMS="$PARAMS --$1"
       shift
       ;;
   esac
@@ -85,6 +85,6 @@ PKG_FLAGS="--max-episodes 3000 \
            --warmup-size 1000 \
            --agent $AGENT
           "
-ALL_FLAGS=$CMLE_FLAGS"-- "$PKG_FLAGS
+ALL_FLAGS=$CMLE_FLAGS"-- "$PKG_FLAGS$PARAMS
 echo $ALL_FLAGS
 gcloud ml-engine jobs submit training $JOB_NAME $ALL_FLAGS

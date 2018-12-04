@@ -1,6 +1,7 @@
 from trainer.env.hfr_env_v01 import HumanFollowingGymEnv
 import numpy as np
 import pybullet as p
+import cv2
 
 env = HumanFollowingGymEnv(robot_type='R2D2',
                            target_angle_max=np.pi / 6,
@@ -38,17 +39,21 @@ while True:
 #    control_msg = [chaser_l_wheel_vel, chaser_r_wheel_vel]
 
     observation, reward, done, info = env.step(np.array(control_msg))
-#    print('depth.min() = {}, depth.max() = {}'.format(
-#        observation[0].min(), observation[0].max()
-#    ))
+    print('depth.min() = {}, depth.max() = {}'.format(
+        observation.min(), observation.max()))
 
     step = info['step']
     print('Step={}, reward={}, observation={}, done={}'.format(
-        step, reward, observation[1], done))
+        step, reward, observation.shape, done))
     chaser_xyz, chaser_rpy = info['chaser']
     target_xyz, target_rpy = info['target']
     print('chaser_xyz={}, chaser_rpy={}'.format(chaser_xyz, chaser_rpy))
     print('target_xyz={}, target_rpy={}'.format(target_xyz, target_rpy))
+
+#    h, w, c = observation.shape
+#    for i in range(c):
+#        cv2.imwrite('observation{}.jpg'.format(i), observation[:, :, i])
+#    break
 
     if done:
         env.reset()

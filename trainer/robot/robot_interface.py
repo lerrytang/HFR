@@ -70,7 +70,7 @@ class RobotInterface(object):
         See PyBullet https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/pointCloudFromCameraImage.py
         """
         depth_img = far * near / (far - (far - near) * depth_img)
-        depth_img = np.clip(depth_img, 0, 20.0)
+        depth_img = np.clip(depth_img, 0, 100.0)
         return rgb_img, depth_img
 
     def set_xy_yaw(self, x, y, yaw):

@@ -54,23 +54,14 @@ def print_var_info(var_list, title):
     tf.logging.info('-' * 50)
 
 
-def preprocess_observation(observation):
-    image, state = observation
-    image = np.expand_dims(image, -1)
-    if np.ndim(image) == 3:
-        image = np.expand_dims(image, 0)
-    if np.ndim(state) == 1:
-        state = np.expand_dims(state, 0)
-    return image, state
-
-
 class ImageEncoder(object):
     """This class learns an embedding of images."""
 
-    def __init__(self, img_h, img_w, name=None):
+    def __init__(self, img_h, img_w, img_c, name=None):
         """Initialization."""
         self.img_h = img_h
         self.img_w = img_w
+        self.img_c = img_c
         scope_name = 'image_encoder' if name is None else name
         with tf.variable_scope(scope_name):
             self.inputs, self.embedding = self.create_embedding_network()
@@ -78,8 +69,9 @@ class ImageEncoder(object):
 
     def create_embedding_network(self):
         """Create the embedding learning part."""
-        inputs = tf.placeholder(dtype=tf.float32,
-                                shape=[None, self.img_h, self.img_w, 1])
+        inputs = tf.placeholder(
+            dtype=tf.float32,
+            shape=[None, self.img_h, self.img_w, self.img_c])
         embedding = create_conv_net(inputs)
         return inputs, embedding
 
@@ -88,7 +80,6 @@ class Actor(object):
     """Actor network."""
 
     def __init__(self,
-                 state_dim,
                  action_dim,
                  action_high,
                  action_low,
@@ -104,7 +95,6 @@ class Actor(object):
         """Actor initialization."""
 
         # member initialization
-        self.s_dim = state_dim
         self.a_dim = action_dim
         self.a_high = action_high
         self.a_low = action_low
@@ -117,17 +107,17 @@ class Actor(object):
         self.img_encoder = img_encoder
         self.target_img_encoder = target_img_encoder
 
-        # build actor and target networks
+        # build actor
         scope_name = 'actor' if name is None else name
         with tf.variable_scope(scope_name):
-            self.ob_state, self.action = self._build_network(
-                self.img_encoder)
+            self.action = self._build_network(self.img_encoder)
         self.params = tf.trainable_variables(scope=scope_name)
         print_var_info(self.params + self.img_encoder.params, scope_name)
+
+        # build target
         scope_name += '_target'
         with tf.variable_scope(scope_name):
-            self.target_ob_state, self.target_action = self._build_network(
-                self.target_img_encoder)
+            self.target_action = self._build_network(self.target_img_encoder)
         self.target_params = tf.trainable_variables(scope=scope_name)
         print_var_info(
             self.target_params + self.target_img_encoder.params, scope_name)
@@ -140,24 +130,25 @@ class Actor(object):
 
     def _build_network(self, im_encoder):
         """Build network for the actor part."""
-        ob_state = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim])
-        observation = tf.concat(values=[im_encoder.embedding, ob_state], axis=1)
-        x = create_fc_net(observation)
+        x = create_fc_net(im_encoder.embedding)
         action = tf.layers.dense(inputs=x,
                                  units=self.a_dim,
                                  activation=tf.nn.sigmoid)
         scaled_action = action * (self.a_high - self.a_low) + self.a_low
-        return ob_state, scaled_action
+        return scaled_action
 
     def _build_ops(self):
         """Build tf operators."""
+        # fc-net weights update operator
         target_update_op = tf.group([
             x.assign(tf.multiply(y, self.tau) + tf.multiply(x, 1. - self.tau))
             for x, y in zip(self.target_params, self.params)])
+        # conv-net weights update operator
         target_im_encoder_update_op = tf.group([
             x.assign(tf.multiply(y, self.tau) + tf.multiply(x, 1. - self.tau))
             for x, y in zip(self.target_img_encoder.params,
                             self.img_encoder.params)])
+        # training operator
         grad_ph = tf.placeholder(tf.float32, [None, self.a_dim])
         if self.train_img_encoder:
             params = self.params + self.img_encoder.params
@@ -165,26 +156,26 @@ class Actor(object):
             params = self.params
         print_var_info(params, 'Actor_to_optimize')
         actor_gradients = tf.gradients(self.action, params, -grad_ph)
-        clipped_grad = [
-            tf.clip_by_norm(tf.div(x, self.batch_size), self.grad_norm_clip)
-            for x in actor_gradients]
+        normalized_grad = [tf.div(x, self.batch_size) for x in actor_gradients]
+        clipped_grad = [tf.clip_by_norm(x, self.grad_norm_clip)
+                        for x in normalized_grad]
         optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         train_op = optimizer.apply_gradients(zip(clipped_grad, params))
         return target_update_op, target_im_encoder_update_op, grad_ph, train_op
 
     def get_action(self, sess, observation):
         """Return action based on its policy."""
-        image, state = preprocess_observation(observation)
+        if np.ndim(observation) == 3:
+            observation = np.expand_dims(observation, axis=0)
         return sess.run(self.action,
-                        feed_dict={self.img_encoder.inputs: image,
-                                   self.ob_state: state})
+                        feed_dict={self.img_encoder.inputs: observation})
 
     def get_target_action(self, sess, observation):
         """Return action based on its target policy."""
-        image, state = preprocess_observation(observation)
+        if np.ndim(observation) == 3:
+            observation = np.expand_dims(observation, axis=0)
         return sess.run(self.target_action,
-                        feed_dict={self.target_img_encoder.inputs: image,
-                                   self.target_ob_state: state})
+                        feed_dict={self.target_img_encoder.inputs: observation})
 
     def update_target(self, sess):
         """Update the target network's weights."""
@@ -194,10 +185,10 @@ class Actor(object):
 
     def train(self, sess, observation, critic_action_grads):
         """Train the actor once."""
-        image, state = preprocess_observation(observation)
+        if np.ndim(observation) == 3:
+            observation = np.expand_dims(observation, axis=0)
         sess.run(self.train_op,
-                 feed_dict={self.img_encoder.inputs: image,
-                            self.ob_state: state,
+                 feed_dict={self.img_encoder.inputs: observation,
                             self.action_gradient: critic_action_grads})
 
 
@@ -205,7 +196,6 @@ class Critic(object):
     """Critic network."""
 
     def __init__(self,
-                 state_dim,
                  action_dim,
                  learning_rate,
                  tau,
@@ -217,7 +207,6 @@ class Critic(object):
         """Critic initialization."""
 
         # member initialization
-        self.s_dim = state_dim
         self.a_dim = action_dim
         self.learning_rate = learning_rate
         self.tau = tau
@@ -226,19 +215,18 @@ class Critic(object):
         self.img_encoder = img_encoder
         self.target_img_encoder = target_img_encoder
 
-        # build the critic and the target
+        # build the critic
         scope_name = 'critic' if name is None else name
         with tf.variable_scope(scope_name):
-            (self.ob_state,
-             self.action,
-             self.q_value) = self._build_network(self.img_encoder)
+            self.action, self.q_value = self._build_network(self.img_encoder)
         self.params = tf.trainable_variables(scope=scope_name)
         print_var_info(self.params + self.img_encoder.params, scope_name)
+
+        # build target
         scope_name += '_target'
         with tf.variable_scope(scope_name):
-            (self.target_ob_state,
-             self.target_action,
-             self.target_q_value) = self._build_network(self.target_img_encoder)
+            self.target_action, self.target_q_value = self._build_network(
+                self.target_img_encoder)
         self.target_params = tf.trainable_variables(scope=scope_name)
         print_var_info(
             self.target_params + self.target_img_encoder.params, scope_name)
@@ -252,24 +240,25 @@ class Critic(object):
 
     def _build_network(self, im_encoder):
         """Build network for the critic part."""
-        ob_state = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim])
-        observation = tf.concat(values=[im_encoder.embedding, ob_state], axis=1)
         action_ph = tf.placeholder(dtype=tf.float32,
                                    shape=[None, self.a_dim])
-        x = tf.concat(values=[observation, action_ph], axis=1)
+        x = tf.concat(values=[im_encoder.embedding, action_ph], axis=1)
         x = create_fc_net(x)
         q_value = tf.squeeze(tf.layers.dense(inputs=x, units=1))
-        return ob_state, action_ph, q_value
+        return action_ph, q_value
 
     def _build_ops(self):
         """Build all related tf operations."""
+        # fc-net update operator
         target_update_op = tf.group([
             x.assign(tf.multiply(y, self.tau) + tf.multiply(x, 1. - self.tau))
             for x, y in zip(self.target_params, self.params)])
+        # conv-net update operator
         target_im_encoder_update_op = tf.group([
             x.assign(tf.multiply(y, self.tau) + tf.multiply(x, 1. - self.tau))
             for x, y in zip(self.target_img_encoder.params,
                             self.img_encoder.params)])
+        # train operator
         y = tf.placeholder(dtype=tf.float32, shape=[None])
         loss = tf.losses.mean_squared_error(y, self.q_value)
         optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
@@ -284,22 +273,22 @@ class Critic(object):
 
     def get_qval(self, sess, observation, action):
         """Get Q-val."""
-        image, state = preprocess_observation(observation)
+        if np.ndim(observation) == 3:
+            observation = np.expand_dims(observation, axis=0)
         if np.ndim(action) == 1:
             action = np.expand_dims(action, axis=0)
         return sess.run(self.q_value,
-                        feed_dict={self.img_encoder.inputs: image,
-                                   self.ob_state: state,
+                        feed_dict={self.img_encoder.inputs: observation,
                                    self.action: action})
 
     def get_target_qval(self, sess, observation, action):
         """Get target network's Q-val."""
-        image, state = preprocess_observation(observation)
+        if np.ndim(observation) == 3:
+            observation = np.expand_dims(observation, axis=0)
         if np.ndim(action) == 1:
             action = np.expand_dims(action, axis=0)
         return sess.run(self.target_q_value,
-                        feed_dict={self.target_img_encoder.inputs: image,
-                                   self.target_ob_state: state,
+                        feed_dict={self.target_img_encoder.inputs: observation,
                                    self.target_action: action})
 
     def update_target(self, sess):
@@ -310,16 +299,16 @@ class Critic(object):
 
     def train(self, sess, observation, action, y):
         """Train/Improve critic once."""
-        image, state = preprocess_observation(observation)
         sess.run(self.train_op,
-                 feed_dict={self.img_encoder.inputs: image,
-                            self.ob_state: state,
+                 feed_dict={self.img_encoder.inputs: observation,
                             self.action: action,
                             self.y: y})
 
-    def get_action_gradients(self, sess, observation, actions):
-        image, state = preprocess_observation(observation)
+    def get_action_gradients(self, sess, observation, action):
+        if np.ndim(observation) == 3:
+            observation = np.expand_dims(observation, axis=0)
+        if np.ndim(action) == 1:
+            action = np.expand_dims(action, axis=0)
         return sess.run(self.action_grad,
-                        feed_dict={self.img_encoder.inputs: image,
-                                   self.ob_state: state,
-                                   self.action: actions})
+                        feed_dict={self.img_encoder.inputs: observation,
+                                   self.action: action})

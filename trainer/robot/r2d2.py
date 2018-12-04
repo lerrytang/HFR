@@ -5,8 +5,8 @@ This implementation is for human following tasks, the controls dimensions are:
 2. right driving wheel angular velocity (velocity control)
 
 """
-import os
 import pybullet as p
+import urdf
 import robot_interface
 
 R_FRONT_WHEEL_JNT = 2
@@ -16,10 +16,8 @@ L_BACK_WHEEL_JNT = 7
 HEAD_SWIVEL_JNT = 8
 CAMERA_JNT = 9
 
-MAX_WHEEL_VELOCITY = 10.
+MAX_WHEEL_VELOCITY = 8.
 MAX_WHEEL_FORCE = 30
-
-URDF_ROOT = os.path.join(os.path.dirname(robot_interface.__file__), 'urdf/r2d2')
 
 
 class R2D2(robot_interface.RobotInterface):
@@ -27,9 +25,9 @@ class R2D2(robot_interface.RobotInterface):
 
     def __init__(self, x, y, yaw):
         """Load URDF and initialize the robot. """
-        p.setAdditionalSearchPath(URDF_ROOT)
+        p.setAdditionalSearchPath(urdf.getDataPath())
         self.z = 0.4705
-        self.id = p.loadURDF('r2d2.urdf',
+        self.id = p.loadURDF('r2d2_urdf.py',
                              [x, y, self.z],
                              p.getQuaternionFromEuler([0, 0, yaw]),
                              flags=p.URDF_USE_INERTIA_FROM_FILE)

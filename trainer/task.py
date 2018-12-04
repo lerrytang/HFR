@@ -4,7 +4,7 @@ import argparse
 from env.hfr_env_v01 import HumanFollowingGymEnv
 from env.hfr_env_v01 import IMAGE_H, IMAGE_W
 from gym import wrappers
-import robot.robot_manager
+import numpy as np
 import rl.agent_manager
 import os
 from tensorflow.contrib.training.python.training import hparam
@@ -39,11 +39,11 @@ def train(config):
     model_path = os.path.join(
         config.job_dir, 'model/{}.ckpt'.format(config.agent))
 
-    env = HumanFollowingGymEnv(robot_type='R2D2')
+    env = HumanFollowingGymEnv(robot_type='R2D2',
+                               action_repeat=config.action_repeat)
     config.action_dim = env.action_dim
     config.action_high = env.action_space.high
     config.action_low = env.action_space.low
-    config.state_dim = env.state_dim
     config.img_h = IMAGE_H
     config.img_w = IMAGE_W
     if config.record_video:
@@ -79,6 +79,8 @@ def train(config):
             while not done:
                 if ep_steps < config.rand_steps:
                     action = env.action_space.sample()
+                    actions.append(action)
+                    noises.append(np.zeros_like(action))
                 else:
                     action, action_org, noise = agent.action_with_noise(sess, s)
                     noises.append(noise)
@@ -129,6 +131,11 @@ def train(config):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        '--action-repeat',
+        help='action repeat count',
+        type=int,
+        default=4)
+    parser.add_argument(
         '--critic-lr',
         help='critic learning rate',
         type=float,
@@ -152,7 +159,7 @@ if __name__ == '__main__':
         '--sigma',
         help='exploration noise standard deviation',
         type=float,
-        default=0.02)
+        default=0.1)
     parser.add_argument(
         '--sigma-min',
         help='minimum exploration noise standard deviation',
@@ -176,7 +183,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--rand-process',
         help='type of random process, supported types are [gaussian|ou]',
-        default='ou')
+        default='gaussian')
     parser.add_argument(
         '--annealing-steps',
         help='steps to anneal noise',
@@ -226,7 +233,7 @@ if __name__ == '__main__':
         '--rand-steps',
         help='number of steps to user random actions in a new episode',
         type=int,
-        default=10)
+        default=0)
     parser.add_argument(
         '--max-episodes',
         help='maximum number of episodes to train',
@@ -236,7 +243,7 @@ if __name__ == '__main__':
         '--eval-interval',
         help='interval to test',
         type=int,
-        default=2)
+        default=5)
     parser.add_argument(
         '--max-to-keep',
         help='number of model generations to keep',

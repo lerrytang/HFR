@@ -40,6 +40,7 @@ class AgentManager(object):
                 im_encoders['critic'] = common.network.ImageEncoder(
                     img_h=config.img_h,
                     img_w=config.img_w,
+                    img_c=config.action_repeat,
                     name='c_im_encoder')
                 if config.share_im_encoder:
                     im_encoders['critic_target'] = im_encoders['critic']
@@ -47,10 +48,12 @@ class AgentManager(object):
                     im_encoders['critic_target'] = common.network.ImageEncoder(
                         img_h=config.img_h,
                         img_w=config.img_w,
+                        img_c=config.action_repeat,
                         name='c_img_encoder_target')
                 im_encoders['actor'] = common.network.ImageEncoder(
                     img_h=config.img_h,
                     img_w=config.img_w,
+                    img_c=config.action_repeat,
                     name='a_im_encoder')
                 if config.share_im_encoder:
                     im_encoders['actor_target'] = im_encoders['actor']
@@ -58,12 +61,14 @@ class AgentManager(object):
                     im_encoders['actor_target'] = common.network.ImageEncoder(
                         img_h=config.img_h,
                         img_w=config.img_w,
+                        img_c=config.action_repeat,
                         name='a_img_encoder_target')
             elif ((not config.use_actor_im_encoder) and
                   config.use_critic_im_encoder):
                 im_encoders['critic'] = common.network.ImageEncoder(
                     img_h=config.img_h,
                     img_w=config.img_w,
+                    img_c=config.action_repeat,
                     name='c_im_encoder')
                 if config.share_im_encoder:
                     im_encoders['critic_target'] = im_encoders['critic']
@@ -71,6 +76,7 @@ class AgentManager(object):
                     im_encoders['critic_target'] = common.network.ImageEncoder(
                         img_h=config.img_h,
                         img_w=config.img_w,
+                        img_c=config.action_repeat,
                         name='c_img_encoder_target')
                 im_encoders['actor'] = im_encoders['critic']
                 im_encoders['actor_target'] = im_encoders['critic_target']
@@ -79,6 +85,7 @@ class AgentManager(object):
                 im_encoders['actor'] = common.network.ImageEncoder(
                     img_h=config.img_h,
                     img_w=config.img_w,
+                    img_c=config.action_repeat,
                     name='a_im_encoder')
                 if config.share_im_encoder:
                     im_encoders['actor_target'] = im_encoders['actor']
@@ -86,13 +93,13 @@ class AgentManager(object):
                     im_encoders['actor_target'] = common.network.ImageEncoder(
                         img_h=config.img_h,
                         img_w=config.img_w,
+                        img_c=config.action_repeat,
                         name='a_img_encoder_target')
                 im_encoders['critic'] = im_encoders['actor']
                 im_encoders['critic_target'] = im_encoders['actor_target']
             else:
                 raise ValueError('Wrong config.')
             critic1 = common.network.Critic(
-                state_dim=config.state_dim,
                 action_dim=config.action_dim,
                 learning_rate=config.critic_lr,
                 tau=config.tau,
@@ -102,7 +109,6 @@ class AgentManager(object):
                 share_img_encoder=config.share_im_encoder,
                 name='critic1')
             critic2 = common.network.Critic(
-                state_dim=config.state_dim,
                 action_dim=config.action_dim,
                 learning_rate=config.critic_lr,
                 tau=config.tau,
@@ -112,7 +118,6 @@ class AgentManager(object):
                 share_img_encoder=True,
                 name='critic2')
             actor = common.network.Actor(
-                state_dim=config.state_dim,
                 action_dim=config.action_dim,
                 action_high=config.action_high,
                 action_low=config.action_low,
