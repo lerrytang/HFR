@@ -39,8 +39,10 @@ while True:
 #    control_msg = [chaser_l_wheel_vel, chaser_r_wheel_vel]
 
     observation, reward, done, info = env.step(np.array(control_msg))
-    print('depth.min() = {}, depth.max() = {}'.format(
-        observation.min(), observation.max()))
+    print('depth.min() = {}, depth.max() = {}, depth.std() = {}'.format(
+        observation[:, :, 0].min(),
+        observation[:, :, 0].max(),
+        observation[:, :, 0].std()))
 
     step = info['step']
     print('Step={}, reward={}, observation={}, done={}'.format(

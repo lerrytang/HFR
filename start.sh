@@ -66,7 +66,7 @@ done
 eval set -- "$PARAMS"
 
 JOB_NAME="${AGENT}_hfr_${now}"
-BUCKET_NAME=${PROJECT_ID}
+BUCKET_NAME="${PROJECT_ID}-rl"
 LOG_DIR="gs://${BUCKET_NAME}/${JOB_NAME}"
 
 # submit job
